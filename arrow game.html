@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Game</title>
+    <style>
+        body {
+            font-family: Montserrat, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #EDEADE;
+        }
+
+        #game-board {
+            border: 0px solid #333;
+            background-color: #fff;
+            width: 400px;
+            height: 400px;
+            position: relative;
+            border-radius: 10px;
+            border-style: inset;
+            border-color: #ffffff;
+			box-shadow: rgb(38, 57, 77) 0px 20px 30px -10px;
+            margin-top: -150px;
+        }
+
+        .emoji {
+            position: absolute;
+            font-size: 20px;
+        }
+
+        .health {
+            color: green;
+        }
+
+        .poison {
+            color: red;
+        }
+
+        #health-count, #timer {
+            position: absolute;
+            top: 10px;
+            font-size: 20px;
+        }
+
+        #health-count {
+            right: 10px;
+        }
+
+        #timer {
+            left: 10px;
+        }
+
+        /* Virtual Control Styles */
+        .control-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .row {
+            display: flex;
+            justify-content: center;
+        }
+        .control-btn {
+            display: inline-block;
+            width: 70px;
+            height: 70px;
+            margin: 10px;
+            background-color: #fff;
+            border: 0px solid black;
+            cursor: pointer;
+            border-radius: 10px;
+            border-style: inset;
+            border-color: #ffffff;
+            box-shadow: rgba(0, 0, 0, 0.19) 0px 10px 20px, rgba(0, 0, 0, 0.23) 0px 6px 6px;
+            font-size: 40px;
+            text-shadow: 2px 2px #FF0000;
+            color: #ADD8E6;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-board"></div>
+    <div id="health-count">Health: <span id="health"></span></div>
+    <div id="timer">Time: <span id="time">00:00</span></div>
+
+    <!-- Virtual Controls -->
+    <div class="control-container">
+        <div class="row">
+            <div class="control-btn" id="up-btn">&#8638;</div>
+        </div>
+        <div class="row">
+            <div class="control-btn" id="left-btn">&#8636;</div>
+            <div class="control-btn" id="down-btn">&#8642;</div>
+            <div class="control-btn" id="right-btn">&#8641;</div>
+        </div>
+    </div>
+
+    <script>
+        const board = document.getElementById('game-board');
+        const healthCountElement = document.getElementById('health');
+        const timerElement = document.getElementById('time');
+        const gridSize = 20;
+        const boardSize = 20;
+        let player = { x: 10, y: 10 };
+        let healthPotion = [];
+        let poison = [];
+        let healthCount = 3; // Initial health count
+        let direction = 'right'; // Initial movement direction
+        let potionCount = 1; // Number of health potions generated each time
+        let poisonCount = 2; // Number of poisons generated each time
+        let generationFrequency = 2000; // Initial generation frequency in milliseconds
+        let startTime; // Start time of the game
+        let timerInterval; // Interval for updating the timer
+        let moveInterval; // Interval for moving the player
+        let visualArrowSpeed = 60; // Movement speed for visual arrow buttons in milliseconds
+        let wasdSpeed = 100; // Movement speed for WASD keys in milliseconds
+
+        function render() {
+            // Clear previous frame
+            board.innerHTML = '';
+
+            // Render player
+            const playerElement = document.createElement('div');
+            playerElement.textContent = '😀';
+            playerElement.classList.add('emoji', 'health');
+            playerElement.style.left = `${player.x * gridSize}px`;
+            playerElement.style.top = `${player.y * gridSize}px`;
+            board.appendChild(playerElement);
+
+            // Render health potions
+            for (let i = 0; i < healthPotion.length; i++) {
+                const potion = healthPotion[i];
+                const potionElement = document.createElement('div');
+                potionElement.textContent = '❤️';
+                potionElement.classList.add('emoji', 'health');
+                potionElement.style.left = `${potion.x * gridSize}px`;
+                potionElement.style.top = `${potion.y * gridSize}px`;
+                board.appendChild(potionElement);
+            }
+
+            // Render poisons
+            for (let i = 0; i < poison.length; i++) {
+                const poisonElement = document.createElement('div');
+                poisonElement.textContent = '☠️';
+                poisonElement.classList.add('emoji', 'poison');
+                poisonElement.style.left = `${poison[i].x * gridSize}px`;
+                poisonElement.style.top = `${poison[i].y * gridSize}px`;
+                board.appendChild(poisonElement);
+            }
+
+            // Update health count
+            healthCountElement.textContent = healthCount;
+        }
+
+        function movePlayer() {
+            switch (direction) {
+                case 'up':
+                    player.y = (player.y - 1 + boardSize) % boardSize;
+                    break;
+                case 'down':
+                    player.y = (player.y + 1) % boardSize;
+                    break;
+                case 'left':
+                    player.x = (player.x - 1 + boardSize) % boardSize;
+                    break;
+                case 'right':
+                    player.x = (player.x + 1) % boardSize;
+                    break;
+            }
+
+            // Check for collisions after movement
+            checkCollisions();
+
+            // Render the game after movement
+            render();
+        }
+
+        function checkCollisions() {
+            // Check if player collides with health potions
+            for (let i = 0; i < healthPotion.length; i++) {
+                if (player.x === healthPotion[i].x && player.y === healthPotion[i].y) {
+                    healthCount++;
+                    healthPotion.splice(i, 1); // Remove the collected potion
+                    break; // Exit loop after collecting one potion per movement
+                }
+            }
+
+            // Check if player collides with poisons
+            for (let i = 0; i < poison.length; i++) {
+                if (player.x === poison[i].x && player.y === poison[i].y) {
+                    healthCount--;
+                    poison.splice(i, 1); // Remove the collided poison
+                    break; // Exit loop after colliding with one poison per movement
+                }
+            }
+
+            // Check for game over
+            if (healthCount <= 0) {
+                gameOver();
+            }
+        }
+
+        function generateObjects() {
+            // Generate health potions
+            for (let i = 0; i < potionCount; i++) {
+                healthPotion.push({ x: Math.floor(Math.random() * boardSize), y: Math.floor(Math.random() * boardSize) });
+            }
+
+            // Generate poisons
+            for (let i = 0; i < poisonCount; i++) {
+                poison.push({ x: Math.floor(Math.random() * boardSize), y: Math.floor(Math.random() * boardSize) });
+            }
+        }
+
+        function startTimer() {
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 1000); // Update timer every second
+        }
+
+        function updateTimer() {
+            const elapsedTime = Math.floor((Date.now() - startTime) / 1000); // Calculate elapsed time in seconds
+            const minutes = Math.floor(elapsedTime / 60);
+            const seconds = elapsedTime % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
+
+        function gameOver() {
+            stopTimer();
+            const confirmation = confirm(`Game Over! Your health count is 0. Time: ${timerElement.textContent}\n\nLet's play again :P`);
+            if (confirmation) {
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            // Reset variables
+            healthCount = 3;
+            direction = 'right';
+            healthPotion = [];
+            poison = [];
+            clearInterval(moveInterval);
+            clearInterval(timerInterval);
+            render();
+            startTimer();
+            moveInterval = setInterval(movePlayer, wasdSpeed);
+            generateObjects();
+        }
+
+        function handleKeyPress(event) {
+            const key = event.key.toLowerCase();
+
+            switch (key) {
+                case 'w':
+                case 'ArrowUp':
+                    direction = 'up';
+                    break;
+                case 's':
+                case 'ArrowDown':
+                    direction = 'down';
+                    break;
+                case 'a':
+                case 'ArrowLeft':
+                    direction = 'left';
+                    break;
+                case 'd':
+                case 'ArrowRight':
+                    direction = 'right';
+                    break;
+            }
+        }
+
+        // Event listeners for keyboard controls
+        document.addEventListener('keydown', handleKeyPress);
+
+        // Event listeners for virtual arrow controls
+        document.getElementById('up-btn').addEventListener('click', () => { direction = 'up'; });
+        document.getElementById('down-btn').addEventListener('click', () => { direction = 'down'; });
+        document.getElementById('left-btn').addEventListener('click', () => { direction = 'left'; });
+        document.getElementById('right-btn').addEventListener('click', () => { direction = 'right'; });
+
+        // Start the game
+        render();
+        startTimer();
+        moveInterval = setInterval(movePlayer, visualArrowSpeed); // Move player at the specified movement speed
+        setInterval(generateObjects, generationFrequency); // Generate objects at a certain frequency
+    </script>
+</body>
+</html>
